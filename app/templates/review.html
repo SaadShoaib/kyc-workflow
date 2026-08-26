@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>KYC Review — {{ applicant.full_name }}</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; max-width: 720px; margin: 40px auto; color: #1a1a1a; padding: 0 16px; }
+        .card { border: 1px solid #ddd; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; }
+        .flag { color: #b3261e; font-weight: 600; }
+        .ok { color: #1a7f37; }
+        .score { font-size: 28px; font-weight: 700; }
+        .note { color: #666; font-size: 14px; }
+        button { padding: 10px 18px; margin-right: 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
+        .approve { background: #1a7f37; color: white; }
+        .escalate { background: #9a6700; color: white; }
+        .reject { background: #b3261e; color: white; }
+        .status { display: inline-block; padding: 2px 10px; border-radius: 12px; background: #eee; font-size: 13px; vertical-align: middle; }
+        textarea { width: 100%; margin-bottom: 10px; font-family: inherit; padding: 8px; border-radius: 6px; border: 1px solid #ccc; }
+        .id-image { max-width: 100%; border-radius: 6px; border: 1px solid #ddd; display: block; }
+    </style>
+</head>
+<body>
+    <h1>{{ applicant.full_name }} <span class="status">{{ applicant.status }}</span></h1>
+    <p>DOB: {{ applicant.dob }} · ID: {{ applicant.id_number }} · {{ applicant.address }}</p>
+
+    <div class="card">
+        <h3>ID card</h3>
+        <img class="id-image" src="/applicants/{{ applicant.id }}/id-image" alt="ID card for {{ applicant.full_name }}">
+    </div>
+
+    {% if risk_brief %}
+    <div class="card">
+        <div class="score">Risk score: {{ risk_brief.score }} / 100</div>
+        <p>Confidence: {{ risk_brief.confidence }} · Suggested: <strong>{{ risk_brief.recommendation }}</strong></p>
+        <p class="note">This is a recommendation only — nothing here has changed the applicant's status.</p>
+        <h3>Evidence</h3>
+        <ul>
+            {% for e in risk_brief.evidence %}
+            <li>[{{ e.source }}] {{ e.point }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% else %}
+    <div class="card"><p class="note">No risk brief yet — POST to /extract, /screen, then /score for this applicant.</p></div>
+    {% endif %}
+
+    {% if extraction %}
+    <div class="card">
+        <h3>Document extraction</h3>
+        <p>Extracted name: {{ extraction.extracted_name }} · DOB: {{ extraction.extracted_dob }}</p>
+        {% if extraction.mismatches %}
+            {% for m in extraction.mismatches %}
+            <p class="flag">Mismatch — {{ m.field }}: form says "{{ m.form_value }}", document says "{{ m.doc_value }}"</p>
+            {% endfor %}
+        {% else %}
+            <p class="ok">No mismatches between form and document.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if screening %}
+    <div class="card">
+        <h3>Sanctions / PEP screening</h3>
+        {% if screening.sanctions_hits or screening.pep_hits %}
+            {% for h in screening.sanctions_hits %}
+            <p class="flag">Sanctions match: {{ h.matched_name }} ({{ h.score }}% similarity, {{ h.source }})</p>
+            {% endfor %}
+            {% for h in screening.pep_hits %}
+            <p class="flag">PEP match: {{ h.matched_name }} ({{ h.score }}% similarity, {{ h.source }})</p>
+            {% endfor %}
+        {% else %}
+            <p class="ok">No sanctions or PEP list matches.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <h3>Decision</h3>
+        <form method="post" action="/applicants/{{ applicant.id }}/decision">
+            <textarea name="notes" placeholder="Reviewer notes (optional)" rows="2"></textarea>
+            <button class="approve" name="action" value="approved" type="submit">Approve</button>
+            <button class="escalate" name="action" value="escalated" type="submit">Escalate</button>
+            <button class="reject" name="action" value="rejected" type="submit">Reject</button>
+        </form>
+    </div>
+</body>
+</html>
