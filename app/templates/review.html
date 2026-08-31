@@ -20,6 +20,11 @@
         .reason-picker { display: none; align-items: center; gap: 8px; }
         .reason-picker select { margin-bottom: 0; }
         .status { display: inline-block; padding: 2px 10px; border-radius: 12px; background: #eee; font-size: 13px; vertical-align: middle; }
+        .pipeline-status { display: flex; gap: 20px; }
+        .step { color: #999; font-size: 14px; }
+        .step.done { color: #1a7f37; font-weight: 600; }
+        .step.current { color: #9a6700; font-weight: 600; }
+        .pending-note { color: #9a6700; font-size: 14px; }
         textarea { width: 100%; margin-bottom: 10px; font-family: inherit; padding: 8px; border-radius: 6px; border: 1px solid #ccc; }
         select { display: block; margin-bottom: 10px; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-family: inherit; }
         .id-image { max-width: 100%; border-radius: 6px; border: 1px solid #ddd; display: block; }
@@ -27,28 +32,23 @@
 </head>
 <body>
     <h1>{{ applicant.full_name }} <span class="status">{{ applicant.status }}</span></h1>
-    <p>DOB: {{ applicant.dob }} · ID: {{ applicant.id_number }} · {{ applicant.address }}</p>
+
+    <div class="card pipeline-status">
+        <span class="step {{ 'done' if extraction else 'current' }}">1. Extraction</span>
+        <span class="step {{ 'done' if screening else ('current' if extraction else '') }}">2. Screening</span>
+        <span class="step {{ 'done' if risk_brief else ('current' if screening else '') }}">3. Synthesis</span>
+        <span class="step {{ 'done' if applicant.status != 'pending' else ('current' if risk_brief else '') }}">4. Review</span>
+    </div>
 
     <div class="card">
         <h3>ID card</h3>
         <img class="id-image" src="/applicants/{{ applicant.id }}/id-image" alt="ID card for {{ applicant.full_name }}">
     </div>
 
-    {% if risk_brief %}
     <div class="card">
-        <div class="score">Risk score: {{ risk_brief.score }} / 100</div>
-        <p>Confidence: {{ risk_brief.confidence }} · Suggested: <strong>{{ risk_brief.recommendation }}</strong></p>
-        <p class="note">This is a recommendation only — nothing here has changed the applicant's status.</p>
-        <h3>Evidence</h3>
-        <ul>
-            {% for e in risk_brief.evidence %}
-            <li>[{{ e.source }}] {{ e.point }}</li>
-            {% endfor %}
-        </ul>
+        <h3>Submitted information</h3>
+        <p>DOB: {{ applicant.dob }} · ID: {{ applicant.id_number }} · {{ applicant.address }}</p>
     </div>
-    {% else %}
-    <div class="card"><p class="note">No risk brief yet — POST to /extract, /screen, then /score for this applicant.</p></div>
-    {% endif %}
 
     {% if extraction %}
     <div class="card">
@@ -62,6 +62,8 @@
             <p class="ok">No mismatches between form and document.</p>
         {% endif %}
     </div>
+    {% else %}
+    <div class="card"><p class="pending-note">Document extraction still pending.</p></div>
     {% endif %}
 
     {% if screening %}
@@ -78,6 +80,24 @@
             <p class="ok">No sanctions or PEP list matches.</p>
         {% endif %}
     </div>
+    {% else %}
+    <div class="card"><p class="pending-note">Sanctions/PEP screening still pending.</p></div>
+    {% endif %}
+
+    {% if risk_brief %}
+    <div class="card">
+        <div class="score">Risk score: {{ risk_brief.score }} / 100</div>
+        <p>Confidence: {{ risk_brief.confidence }} · Suggested: <strong>{{ risk_brief.recommendation }}</strong></p>
+        <p class="note">This is a recommendation only — nothing here has changed the applicant's status.</p>
+        <h3>Evidence</h3>
+        <ul>
+            {% for e in risk_brief.evidence %}
+            <li>[{{ e.source }}] {{ e.point }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% else %}
+    <div class="card"><p class="pending-note">AI risk analysis still pending.</p></div>
     {% endif %}
 
     <div class="card">
