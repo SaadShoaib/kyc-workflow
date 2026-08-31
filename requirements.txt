@@ -7,5 +7,7 @@ google-genai
 rapidfuzz
 python-multipart
 jinja2
-pillow
 python-dotenv
+langgraph
+langgraph-checkpoint-sqlite
+httpx

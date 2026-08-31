@@ -32,7 +32,7 @@ from app.schemas import RiskBriefOut
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")  # "anthropic", "gemini", or "ollama"
 
 ANTHROPIC_MODEL = "claude-sonnet-5"
-GEMINI_MODEL = "gemini-3.6-flash"
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 OLLAMA_TEXT_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "llama3.1")
 
 SYSTEM_PROMPT = (
@@ -143,7 +143,9 @@ def _synthesize_with_gemini(applicant, extraction, screening) -> tuple[RiskBrief
     from google import genai
     from google.genai import types
 
-    client = genai.Client()  # reads GEMINI_API_KEY from the environment
+    # Without an explicit timeout, a stalled connection can hang this call
+    # forever — the SDK has no default. 30s is generous for a text-only call.
+    client = genai.Client(http_options=types.HttpOptions(timeout=30_000))  # reads GEMINI_API_KEY from the environment
     response = client.models.generate_content(
         model=GEMINI_MODEL,
         contents=(

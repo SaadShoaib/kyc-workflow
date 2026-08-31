@@ -91,6 +91,7 @@ class Decision(Base):
     applicant_id = Column(Integer, ForeignKey("applicants.id"), unique=True)
 
     action = Column(String, nullable=False)   # approved | escalated | rejected
+    reason_code = Column(String, nullable=True)  # mismatch | sanctions | pep | other — required for escalated/rejected
     reviewer = Column(String, default="demo_reviewer")
     notes = Column(String, nullable=True)
     decided_at = Column(DateTime, default=datetime.utcnow)

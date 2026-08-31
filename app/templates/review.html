@@ -13,9 +13,15 @@
         button { padding: 10px 18px; margin-right: 8px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
         .approve { background: #1a7f37; color: white; }
         .escalate { background: #9a6700; color: white; }
+        .rerequest { background: #0969da; color: white; }
         .reject { background: #b3261e; color: white; }
+        .confirm { background: #1a1a1a; color: white; }
+        .cancel { background: #eee; color: #1a1a1a; }
+        .reason-picker { display: none; align-items: center; gap: 8px; }
+        .reason-picker select { margin-bottom: 0; }
         .status { display: inline-block; padding: 2px 10px; border-radius: 12px; background: #eee; font-size: 13px; vertical-align: middle; }
         textarea { width: 100%; margin-bottom: 10px; font-family: inherit; padding: 8px; border-radius: 6px; border: 1px solid #ccc; }
+        select { display: block; margin-bottom: 10px; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-family: inherit; }
         .id-image { max-width: 100%; border-radius: 6px; border: 1px solid #ddd; display: block; }
     </style>
 </head>
@@ -76,12 +82,64 @@
 
     <div class="card">
         <h3>Decision</h3>
-        <form method="post" action="/applicants/{{ applicant.id }}/decision">
+        <form method="post" action="/applicants/{{ applicant.id }}/decision" id="decision-form">
             <textarea name="notes" placeholder="Reviewer notes (optional)" rows="2"></textarea>
-            <button class="approve" name="action" value="approved" type="submit">Approve</button>
-            <button class="escalate" name="action" value="escalated" type="submit">Escalate</button>
-            <button class="reject" name="action" value="rejected" type="submit">Reject</button>
+            <input type="hidden" name="action" id="decision-action">
+            <input type="hidden" name="reason_code" id="decision-reason">
+
+            <div id="default-buttons">
+                <button type="button" class="approve" onclick="submitDecision('approved', '')">Approve</button>
+                <button type="button" class="escalate" onclick="showReasonPicker('escalated', 'pep')">Escalate</button>
+                <button type="button" class="rerequest" onclick="submitDecision('rejected', 'mismatch')">Re-request Documents</button>
+                <button type="button" class="reject" onclick="showReasonPicker('rejected', 'sanctions')">Reject</button>
+            </div>
+
+            <div id="reason-picker" class="reason-picker">
+                <select id="reason-select"></select>
+                <button type="button" class="confirm" onclick="confirmReason()">Confirm</button>
+                <button type="button" class="cancel" onclick="cancelReason()">Cancel</button>
+            </div>
         </form>
     </div>
+
+    <script>
+        const REASON_OPTIONS = {
+            escalated: [["pep", "PEP match"], ["other", "Other"]],
+            rejected: [["sanctions", "Sanctions match"], ["other", "Other"]],
+        };
+        let pendingAction = null;
+
+        function submitDecision(action, reasonCode) {
+            document.getElementById('decision-action').value = action;
+            document.getElementById('decision-reason').value = reasonCode;
+            document.getElementById('decision-form').submit();
+        }
+
+        function showReasonPicker(action, defaultReason) {
+            pendingAction = action;
+            const select = document.getElementById('reason-select');
+            select.innerHTML = '';
+            for (const [value, label] of REASON_OPTIONS[action]) {
+                const opt = document.createElement('option');
+                opt.value = value;
+                opt.textContent = label;
+                if (value === defaultReason) opt.selected = true;
+                select.appendChild(opt);
+            }
+            document.getElementById('default-buttons').style.display = 'none';
+            document.getElementById('reason-picker').style.display = 'flex';
+        }
+
+        function cancelReason() {
+            pendingAction = null;
+            document.getElementById('default-buttons').style.display = 'block';
+            document.getElementById('reason-picker').style.display = 'none';
+        }
+
+        function confirmReason() {
+            const reasonCode = document.getElementById('reason-select').value;
+            submitDecision(pendingAction, reasonCode);
+        }
+    </script>
 </body>
 </html>
