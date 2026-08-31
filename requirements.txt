@@ -4,6 +4,7 @@ sqlalchemy
 anthropic
 ollama
 google-genai
+mistralai
 rapidfuzz
 python-multipart
 jinja2

@@ -15,7 +15,7 @@ Three things are enforced deliberately here, not just by convention:
      The model still writes the evidence narrative; it just doesn't get a
      vote on the number.
 
-Supports three providers, switched with the LLM_PROVIDER env var — see
+Supports four providers, switched with the LLM_PROVIDER env var — see
 extraction.py for the same pattern. Ollama and Gemini here are text-only, so
 any decent local instruct model works for Ollama, e.g.:
     ollama pull llama3.1
@@ -29,10 +29,11 @@ from sqlalchemy.orm import Session
 from app.models import Applicant, ExtractionResult, RiskBrief, ScreeningResult
 from app.schemas import RiskBriefOut
 
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")  # "anthropic", "gemini", or "ollama"
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")  # "anthropic", "gemini", "mistral", or "ollama"
 
 ANTHROPIC_MODEL = "claude-sonnet-5"
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
 OLLAMA_TEXT_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "llama3.1")
 
 SYSTEM_PROMPT = (
@@ -161,6 +162,36 @@ def _synthesize_with_gemini(applicant, extraction, screening) -> tuple[RiskBrief
     return RiskBriefOut.model_validate_json(response.text), response.text
 
 
+def _synthesize_with_mistral(applicant, extraction, screening) -> tuple[RiskBriefOut, str]:
+    from mistralai.client import Mistral
+
+    client = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
+    response = client.chat.complete(
+        model=MISTRAL_MODEL,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": (
+                    "Here are the extraction and screening results for this "
+                    f"applicant:\n\n{_build_context(applicant, extraction, screening)}"
+                ),
+            },
+        ],
+        tools=[{
+            "type": "function",
+            "function": {
+                "name": RISK_BRIEF_TOOL["name"],
+                "description": RISK_BRIEF_TOOL["description"],
+                "parameters": RISK_BRIEF_TOOL["input_schema"],
+            },
+        }],
+        tool_choice="any",
+    )
+    arguments = response.choices[0].message.tool_calls[0].function.arguments
+    return RiskBriefOut(**json.loads(arguments)), arguments
+
+
 def _synthesize_with_ollama(applicant, extraction, screening) -> tuple[RiskBriefOut, str]:
     import ollama
 
@@ -204,6 +235,8 @@ def synthesize_risk(db: Session, applicant_id: int) -> RiskBrief:
         brief, raw_output = _synthesize_with_ollama(applicant, extraction, screening)
     elif LLM_PROVIDER == "gemini":
         brief, raw_output = _synthesize_with_gemini(applicant, extraction, screening)
+    elif LLM_PROVIDER == "mistral":
+        brief, raw_output = _synthesize_with_mistral(applicant, extraction, screening)
     else:
         brief, raw_output = _synthesize_with_anthropic(applicant, extraction, screening)
 

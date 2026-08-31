@@ -1,17 +1,19 @@
 """
 Document extraction — plain function, no framework.
 
-Supports three providers, switched with the LLM_PROVIDER env var:
+Supports four providers, switched with the LLM_PROVIDER env var:
   - "anthropic" (default): Claude vision, forced tool-call output.
   - "gemini": Google's hosted Gemini vision, forced JSON-schema output.
     Free tier (rate-limited), needs a GEMINI_API_KEY.
+  - "mistral": Mistral's hosted vision model, forced tool-call output.
+    Free tier, needs a MISTRAL_API_KEY.
   - "ollama": a local vision model via Ollama, forced JSON-schema output.
     Free, no API key, runs entirely on your machine. Needs a vision-capable
     model pulled locally first, e.g.:
         ollama pull llama3.2-vision      # heavier, more accurate
         ollama pull moondream            # lighter, faster, good for iterating
 
-All three paths produce the same ExtractedFields object and go through the same
+All four paths produce the same ExtractedFields object and go through the same
 diff/save logic below — the provider only affects how that object gets filled in.
 """
 import base64
@@ -25,10 +27,11 @@ from sqlalchemy.orm import Session
 from app.models import Applicant, ExtractionResult
 from app.schemas import ExtractedFields, Mismatch
 
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")  # "anthropic", "gemini", or "ollama"
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")  # "anthropic", "gemini", "mistral", or "ollama"
 
 ANTHROPIC_MODEL = "claude-sonnet-5"
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
 OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "llama3.2-vision")
 
 EXTRACTION_PROMPT = (
@@ -118,6 +121,36 @@ def _extract_with_gemini(image_path: str) -> tuple[ExtractedFields, str]:
     return ExtractedFields.model_validate_json(response.text), response.text
 
 
+def _extract_with_mistral(image_path: str) -> tuple[ExtractedFields, str]:
+    from mistralai.client import Mistral
+
+    client = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
+    mime_type = mimetypes.guess_type(image_path)[0] or "image/jpeg"
+    response = client.chat.complete(
+        model=MISTRAL_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": EXTRACTION_PROMPT},
+                    {"type": "image_url", "image_url": f"data:{mime_type};base64,{_image_to_base64(image_path)}"},
+                ],
+            }
+        ],
+        tools=[{
+            "type": "function",
+            "function": {
+                "name": EXTRACTION_TOOL["name"],
+                "description": EXTRACTION_TOOL["description"],
+                "parameters": EXTRACTION_TOOL["input_schema"],
+            },
+        }],
+        tool_choice="any",
+    )
+    arguments = response.choices[0].message.tool_calls[0].function.arguments
+    return ExtractedFields(**json.loads(arguments)), arguments
+
+
 def _extract_with_ollama(image_path: str) -> tuple[ExtractedFields, str]:
     import ollama
 
@@ -169,6 +202,8 @@ def extract_applicant(db: Session, applicant_id: int) -> ExtractionResult:
         extracted, raw_output = _extract_with_ollama(applicant.id_image_path)
     elif LLM_PROVIDER == "gemini":
         extracted, raw_output = _extract_with_gemini(applicant.id_image_path)
+    elif LLM_PROVIDER == "mistral":
+        extracted, raw_output = _extract_with_mistral(applicant.id_image_path)
     else:
         extracted, raw_output = _extract_with_anthropic(applicant.id_image_path)
 
